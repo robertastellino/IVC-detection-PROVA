@@ -152,7 +152,7 @@ def test(epoch):
         }
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')
-        torch.save(checkpoint, './deep_sort_pytorch/deep_sort/deep/checkpoint/ckpt.t7')
+        torch.save(checkpoint, './checkpoint/ckpt.t7')
 
     return test_loss/len(testloader), 1. - correct/total
 
