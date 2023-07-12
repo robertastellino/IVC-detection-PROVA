@@ -10,7 +10,7 @@ import torchvision
 
 from model import Net
 
-parser = argparse.ArgumentParser(description="Train on market1501")
+parser = argparse.ArgumentParser(description="Train on custom dataset")
 parser.add_argument("--data-dir", default='data', type=str)
 parser.add_argument("--no-cuda", action="store_true")
 parser.add_argument("--gpu-id", default=0, type=int)
@@ -27,8 +27,8 @@ if torch.cuda.is_available() and not args.no_cuda:
 
 # data loading
 root = args.data_dir
-train_dir = os.path.join(root, "train")
-test_dir = os.path.join(root, "test")
+train_dir = os.path.join(root, "bounding_box_train")
+test_dir = os.path.join(root, "bounding_box_test")
 transform_train = torchvision.transforms.Compose([
     torchvision.transforms.RandomCrop((128, 64), padding=4),
     torchvision.transforms.RandomHorizontalFlip(),
@@ -152,7 +152,7 @@ def test(epoch):
         }
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')
-        torch.save(checkpoint, './checkpoint/ckpt.t7')
+        torch.save(checkpoint, './deep_sort_pytorch/deep_sort/deep/checkpoint/ckpt.t7')
 
     return test_loss/len(testloader), 1. - correct/total
 
