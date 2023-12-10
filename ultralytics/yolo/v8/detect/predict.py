@@ -6,12 +6,13 @@ import argparse
 import time
 from pathlib import Path
 
+import os
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
 from numpy import random
 from ultralytics.yolo.engine.predictor import BasePredictor
-from ultralytics.yolo.utils import DEFAULT_CONFIG, ROOT, ops
+from ultralytics.yolo.utils import DEFAULT_CONFIG, ROOT, ops, LOGGER, SETTINGS, callbacks, colorstr
 from ultralytics.yolo.utils.checks import check_imgsz
 from ultralytics.yolo.utils.plotting import Annotator, colors, save_one_box
 
@@ -140,6 +141,9 @@ def draw_boxes(img, bbox, names,object_id, identities=None, offset=(0, 0)):
 
         # code to find center of bottom edge
         center = (int((x2+x1)/ 2), int((y2+y2)/2))
+        
+        # Calculate the center of the bounding box
+        center_bbox = (int((x2 + x1) / 2), int((y2 + y1) / 2))
 
         # get ID of object
         id = int(identities[i]) if identities is not None else 0
@@ -163,6 +167,8 @@ def draw_boxes(img, bbox, names,object_id, identities=None, offset=(0, 0)):
             thickness = int(np.sqrt(64 / float(i + i)) * 1.5)
             # draw trails
             cv2.line(img, data_deque[id][i - 1], data_deque[id][i], color, thickness)
+            # Draw a small dot at the center
+            cv2.circle(img, center_bbox, radius=2, color=color, thickness=-1)  # -1 thickness fills the circle
     return img
 
 
@@ -212,8 +218,32 @@ class DetectionPredictor(BasePredictor):
 
         det = preds[idx]
         all_outputs.append(det)
+        
+        project = self.args.project or Path(SETTINGS['runs_dir']) / self.args.task
+        predictions_path = os.path.join(Path(project), "Predictions") #crea il path per le predizioni
+
+        if not os.path.exists(predictions_path):
+            os.makedirs(predictions_path)
+        
+        centers_path=os.path.join(Path(project), "Centers") #crea il path per salvare i centri dei bbox
+        if not os.path.exists(centers_path):
+            os.makedirs(centers_path)
+
+        file_path = os.path.join(predictions_path, "frame_{:06d}.txt".format(frame -1))
+        center_file_path=os.path.join(centers_path, "centers.txt")
+
         if len(det) == 0:
-            return log_string
+          with open (file_path , 'w') as f :
+                f . write ("") #if there are no predictions for one frame, write an empty file
+          
+          if os.path.isfile(center_file_path):
+                 with open (center_file_path , "a") as f :
+                    f.write(f"{frame-1}\n") #write just the frame number
+          else:
+              with open (center_file_path,'w') as f:
+                    f.write(f"{frame-1}\n") #write just the frame number
+          return log_string
+
         for c in det[:, 5].unique():
             n = (det[:, 5] == c).sum()  # detections per class
             log_string += f"{n} {self.model.names[int(c)]}{'s' * (n > 1)}, "
@@ -233,12 +263,34 @@ class DetectionPredictor(BasePredictor):
         confss = torch.Tensor(confs)
           
         outputs = deepsort.update(xywhs, confss, oids, im0)
+
         if len(outputs) > 0:
             bbox_xyxy = outputs[:, :4]
-            identities = outputs[:, -2]
-            object_id = outputs[:, -1]
-            
+            identities = outputs[:, -2] #ID of the detected object
+            object_id = outputs[:, -1] #class of the detected object
+
             draw_boxes(im0, bbox_xyxy, self.model.names, object_id,identities)
+            #print(im0.shape[0])
+            
+            for i in range(len(identities)):
+                bbox = bbox_xyxy[i]
+                w = (bbox[2] - bbox[0]) / im0.shape[1]
+                h = (bbox[3] - bbox[1]) / im0.shape[0]
+                x = ((bbox[0] + bbox[2]) / 2 - w / 2) / im0.shape[1]
+                y = ((bbox[1] + bbox[3]) / 2 - h / 2) / im0.shape[0]
+
+                # Write the identity and formatted values to the file with 6 decimal places
+                with open(file_path, "w") as f:
+                    f.write(f"{identities[i]} {x:.6f} {y:.6f} {w:.6f} {h:.6f}\n")
+
+                with open(center_file_path,"a") as f:
+                    f.write(f"{frame-1} {x:.6f} {y:.6f}\n")
+      
+        else: 
+           with open (file_path , "w") as f : 
+                f . write ("") #if there are no predictions for one frame, write an empty file
+           with open(center_file_path,"a") as f:
+                f.write(f"{frame-1}\n")
 
         return log_string
 
